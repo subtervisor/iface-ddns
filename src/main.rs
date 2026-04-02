@@ -65,8 +65,9 @@ async fn main() {
         }
     };
 
-    let mut aws_builder = aws_config::defaults(BehaviorVersion::latest());
-    if let (Some(key_id), Some(secret)) = (
+    // When credentials are provided in the config file, use from_env() which skips
+    // ~/.aws file loading entirely. Otherwise use defaults() for the full credential chain.
+    let aws_config = if let (Some(key_id), Some(secret)) = (
         config.global.aws_access_key_id.as_deref(),
         config.global.aws_secret_access_key.as_deref(),
     ) {
@@ -77,12 +78,18 @@ async fn main() {
             None,
             "iface-ddns-config",
         );
-        aws_builder = aws_builder.credentials_provider(creds);
-    }
-    if let Some(region) = config.global.aws_region.as_deref() {
-        aws_builder = aws_builder.region(aws_config::Region::new(region.to_string()));
-    }
-    let aws_config = aws_builder.load().await;
+        let mut builder = aws_config::from_env().credentials_provider(creds);
+        if let Some(region) = config.global.aws_region.as_deref() {
+            builder = builder.region(aws_config::Region::new(region.to_string()));
+        }
+        builder.load().await
+    } else {
+        let mut builder = aws_config::defaults(BehaviorVersion::latest());
+        if let Some(region) = config.global.aws_region.as_deref() {
+            builder = builder.region(aws_config::Region::new(region.to_string()));
+        }
+        builder.load().await
+    };
     let client = Client::new(&aws_config);
 
     info!(
