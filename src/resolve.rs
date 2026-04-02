@@ -30,7 +30,7 @@ fn resolve_direct(interface: &str, record_type: &RecordType) -> Result<IpAddr, E
         found_iface = true;
         let ip = iface.addr.ip();
         match record_type {
-            RecordType::A if ip.is_ipv4() => return Ok(ip),
+            RecordType::A if ip.is_ipv4() && !is_private_v4(ip) => return Ok(ip),
             RecordType::Aaaa if ip.is_ipv6() && !is_link_local_v6(ip) => return Ok(ip),
             _ => {}
         }
@@ -96,6 +96,21 @@ async fn resolve_web(
     }
 
     Ok(ip)
+}
+
+fn is_private_v4(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            // RFC 1918: 10/8, 172.16/12, 192.168/16
+            // RFC 3927: 169.254/16 (link-local)
+            o[0] == 10
+                || (o[0] == 172 && (o[1] & 0xf0) == 16)
+                || (o[0] == 192 && o[1] == 168)
+                || (o[0] == 169 && o[1] == 254)
+        }
+        _ => false,
+    }
 }
 
 fn is_link_local_v6(ip: IpAddr) -> bool {
