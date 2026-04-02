@@ -18,6 +18,8 @@ pub struct GlobalConfig {
     pub interval_secs: u64,
     #[serde(default = "default_web_url")]
     pub web_url: String,
+    #[serde(default = "default_web_timeout")]
+    pub web_timeout_secs: u64,
     /// AWS credentials. If absent, the SDK's default credential chain is used.
     pub aws_access_key_id: Option<String>,
     pub aws_secret_access_key: Option<String>,
@@ -32,6 +34,10 @@ fn default_interval() -> u64 {
 
 fn default_web_url() -> String {
     "https://ifconfig.me".to_string()
+}
+
+fn default_web_timeout() -> u64 {
+    30
 }
 
 #[derive(Debug, Clone, Deserialize)]

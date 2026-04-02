@@ -1,4 +1,5 @@
 use std::net::IpAddr;
+use std::time::Duration;
 
 use crate::config::{GlobalConfig, RecordConfig, RecordType, ResolveMode};
 use crate::error::Error;
@@ -9,7 +10,7 @@ pub async fn resolve_ip(record: &RecordConfig, global: &GlobalConfig) -> Result<
         ResolveMode::Direct => resolve_direct(&record.interface, &record.record_type),
         ResolveMode::Web => {
             let url = record.effective_web_url(global);
-            resolve_web(&record.interface, url, &record.record_type).await
+            resolve_web(&record.interface, url, &record.record_type, global.web_timeout_secs).await
         }
     }
 }
@@ -56,12 +57,14 @@ async fn resolve_web(
     interface: &str,
     web_url: &str,
     record_type: &RecordType,
+    timeout_secs: u64,
 ) -> Result<IpAddr, Error> {
     let local_addr = resolve_direct(interface, record_type)?;
 
     let client = reqwest::Client::builder()
         .local_address(local_addr)
         .user_agent("curl/8.0")
+        .timeout(Duration::from_secs(timeout_secs))
         .build()
         .map_err(Error::WebResolve)?;
 
