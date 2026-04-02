@@ -65,9 +65,10 @@ async fn main() {
         }
     };
 
-    // When credentials are provided in the config file, use from_env() which skips
-    // ~/.aws file loading entirely. Otherwise use defaults() for the full credential chain.
-    let aws_config = if let (Some(key_id), Some(secret)) = (
+    // When credentials are provided in the config file, build the Route53 client config
+    // directly to avoid the aws_config loading machinery touching ~/.aws entirely.
+    // Otherwise fall back to the full default credential chain.
+    let client = if let (Some(key_id), Some(secret)) = (
         config.global.aws_access_key_id.as_deref(),
         config.global.aws_secret_access_key.as_deref(),
     ) {
@@ -78,19 +79,19 @@ async fn main() {
             None,
             "iface-ddns-config",
         );
-        let mut builder = aws_config::from_env().credentials_provider(creds);
+        let mut builder = aws_sdk_route53::Config::builder()
+            .credentials_provider(creds);
         if let Some(region) = config.global.aws_region.as_deref() {
-            builder = builder.region(aws_config::Region::new(region.to_string()));
+            builder = builder.region(aws_sdk_route53::config::Region::new(region.to_string()));
         }
-        builder.load().await
+        Client::from_conf(builder.build())
     } else {
         let mut builder = aws_config::defaults(BehaviorVersion::latest());
         if let Some(region) = config.global.aws_region.as_deref() {
             builder = builder.region(aws_config::Region::new(region.to_string()));
         }
-        builder.load().await
+        Client::new(&builder.load().await)
     };
-    let client = Client::new(&aws_config);
 
     info!(
         records = config.record.len(),
