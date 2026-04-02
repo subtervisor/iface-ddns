@@ -1,0 +1,20 @@
+[package]
+name = "iface-ddns"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-credential-types = "1"
+aws-sdk-route53 = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+if-addrs = "0.13"
+backon = { version = "1", features = ["tokio-sleep"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-journald = "0.3"
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
