@@ -87,6 +87,15 @@ pub enum RecordType {
     Aaaa,
 }
 
+impl std::fmt::Display for RecordType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RecordType::A => f.write_str("A"),
+            RecordType::Aaaa => f.write_str("AAAA"),
+        }
+    }
+}
+
 pub fn load(path: &Path) -> Result<Config, Error> {
     let contents = std::fs::read_to_string(path)
         .map_err(|e| Error::Config(format!("failed to read {}: {e}", path.display())))?;

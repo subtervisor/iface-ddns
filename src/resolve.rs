@@ -1,6 +1,8 @@
 use std::net::IpAddr;
 use std::time::Duration;
 
+use tracing::debug;
+
 use crate::config::{GlobalConfig, RecordConfig, RecordType, ResolveMode};
 use crate::error::Error;
 
@@ -60,6 +62,8 @@ async fn resolve_web(
     timeout_secs: u64,
 ) -> Result<IpAddr, Error> {
     let local_addr = resolve_direct(interface, record_type)?;
+
+    debug!(interface=%interface, web_url=%web_url, record_type=%record_type, timeout=%timeout_secs, "Fetching external IP");
 
     let client = reqwest::Client::builder()
         .local_address(local_addr)
