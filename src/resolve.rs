@@ -66,6 +66,7 @@ async fn resolve_web(
     debug!(interface=%interface, web_url=%web_url, record_type=%record_type, timeout=%timeout_secs, "Fetching external IP");
 
     let client = reqwest::Client::builder()
+        .interface(interface)
         .local_address(local_addr)
         .user_agent("curl/8.0")
         .timeout(Duration::from_secs(timeout_secs))
