@@ -80,6 +80,7 @@ async fn main() {
             "iface-ddns-config",
         );
         let mut builder = aws_sdk_route53::Config::builder()
+            .behavior_version(aws_sdk_route53::config::BehaviorVersion::latest())
             .credentials_provider(creds);
         if let Some(region) = config.global.aws_region.as_deref() {
             builder = builder.region(aws_sdk_route53::config::Region::new(region.to_string()));
