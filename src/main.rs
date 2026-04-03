@@ -3,6 +3,8 @@ mod dns;
 mod error;
 mod resolve;
 
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -15,7 +17,7 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-use config::{Config, GlobalConfig, RecordConfig};
+use config::{Config, RecordConfig, RecordType};
 use error::Error;
 
 #[derive(Parser)]
@@ -114,8 +116,34 @@ async fn main() {
 /// Run one update cycle over all configured records.
 /// Errors are logged per-record; a failure on one record does not block others.
 async fn run_cycle(client: &Client, config: &Config) {
+    // Resolve each unique (interface, record_type) pair once and cache the result.
+    let mut ip_cache: HashMap<(String, RecordType), IpAddr> = HashMap::new();
     for record in &config.record {
-        if let Err(e) = process_record(client, record, &config.global).await {
+        let key = (record.interface.clone(), record.record_type.clone());
+        if ip_cache.contains_key(&key) {
+            continue;
+        }
+        match resolve::resolve_ip(record, &config.global).await {
+            Ok(ip) => {
+                ip_cache.insert(key, ip);
+            }
+            Err(e) => {
+                error!(
+                    interface = %record.interface,
+                    record_type = %record.record_type,
+                    error = %e,
+                    "failed to resolve IP for interface"
+                );
+            }
+        }
+    }
+
+    for record in &config.record {
+        let key = (record.interface.clone(), record.record_type.clone());
+        let Some(&ip) = ip_cache.get(&key) else {
+            continue; // resolution already logged above
+        };
+        if let Err(e) = process_record(client, record, ip).await {
             error!(
                 record = %record.name,
                 zone = %record.hosted_zone_id,
@@ -126,13 +154,12 @@ async fn run_cycle(client: &Client, config: &Config) {
     }
 }
 
-/// Resolve the current IP, compare with Route53, and upsert if different.
+/// Compare the pre-resolved IP with Route53 and upsert if different.
 async fn process_record(
     client: &Client,
     record: &RecordConfig,
-    global: &GlobalConfig,
+    ip: IpAddr,
 ) -> Result<(), Error> {
-    let ip = resolve::resolve_ip(record, global).await?;
     let ip_str = ip.to_string();
     let rr_type = record.rr_type();
 

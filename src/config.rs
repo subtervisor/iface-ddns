@@ -80,7 +80,7 @@ pub enum ResolveMode {
     Web,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash)]
 pub enum RecordType {
     A,
     #[serde(rename = "AAAA")]
