@@ -69,7 +69,6 @@ impl RecordConfig {
             RecordType::Aaaa => RrType::Aaaa,
         }
     }
-
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]

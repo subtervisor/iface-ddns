@@ -33,6 +33,9 @@ pub enum Error {
 impl Error {
     /// Returns true for transient errors that are worth retrying.
     pub fn is_retryable(&self) -> bool {
-        matches!(self, Error::WebResolve(_) | Error::Route53(_))
+        matches!(
+            self,
+            Error::WebResolve(_) | Error::InvalidWebIp(_) | Error::Route53(_)
+        )
     }
 }

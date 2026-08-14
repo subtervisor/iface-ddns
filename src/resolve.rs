@@ -12,7 +12,13 @@ pub async fn resolve_ip(record: &RecordConfig, global: &GlobalConfig) -> Result<
         ResolveMode::Direct => resolve_direct(&record.interface, &record.record_type),
         ResolveMode::Web => {
             let url = record.effective_web_url(global);
-            resolve_web(&record.interface, url, &record.record_type, global.web_timeout_secs).await
+            resolve_web(
+                &record.interface,
+                url,
+                &record.record_type,
+                global.web_timeout_secs,
+            )
+            .await
         }
     }
 }
@@ -73,7 +79,7 @@ async fn resolve_web(
         .build()
         .map_err(Error::WebResolve)?;
 
-    let response = client.get(web_url).send().await?;
+    let response = client.get(web_url).send().await?.error_for_status()?;
     let body = response.text().await?;
     let trimmed = body.trim();
 

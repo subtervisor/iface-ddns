@@ -4,6 +4,7 @@ mod error;
 mod resolve;
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -123,7 +124,8 @@ async fn run_cycle(client: &Client, config: &Config) {
         if ip_cache.contains_key(&key) {
             continue;
         }
-        match resolve::resolve_ip(record, &config.global).await {
+        let label = format!("resolve {}/{}", record.interface, record.record_type);
+        match with_retry(&label, || resolve::resolve_ip(record, &config.global)).await {
             Ok(ip) => {
                 ip_cache.insert(key, ip);
             }
@@ -155,20 +157,18 @@ async fn run_cycle(client: &Client, config: &Config) {
 }
 
 /// Compare the pre-resolved IP with Route53 and upsert if different.
-async fn process_record(
-    client: &Client,
-    record: &RecordConfig,
-    ip: IpAddr,
-) -> Result<(), Error> {
+async fn process_record(client: &Client, record: &RecordConfig, ip: IpAddr) -> Result<(), Error> {
     let ip_str = ip.to_string();
     let rr_type = record.rr_type();
 
-    let current = dns::get_current_record(
-        client,
-        &record.hosted_zone_id,
-        &record.name,
-        rr_type.clone(),
-    )
+    let current = with_retry(&format!("get {}", record.name), || {
+        dns::get_current_record(
+            client,
+            &record.hosted_zone_id,
+            &record.name,
+            rr_type.clone(),
+        )
+    })
     .await?;
 
     if current.as_deref() == Some(ip_str.as_str()) {
@@ -195,31 +195,38 @@ async fn process_record(
         );
     }
 
-    let zone_id = record.hosted_zone_id.clone();
-    let name = record.name.clone();
-    let ttl = record.ttl;
-    let rr = rr_type.clone();
-
-    (|| async {
-        dns::upsert_record(client, &zone_id, &name, rr.clone(), ttl, &ip_str).await
-    })
-    .retry(
-        ExponentialBuilder::default()
-            .with_min_delay(Duration::from_secs(1))
-            .with_max_delay(Duration::from_secs(60))
-            .with_max_times(5),
-    )
-    .when(|e: &Error| e.is_retryable())
-    .notify(|err, dur| {
-        warn!(
-            record = %name,
-            error = %err,
-            delay = ?dur,
-            "upsert failed, retrying"
-        );
+    with_retry(&format!("upsert {}", record.name), || {
+        dns::upsert_record(
+            client,
+            &record.hosted_zone_id,
+            &record.name,
+            rr_type.clone(),
+            record.ttl,
+            &ip_str,
+        )
     })
     .await?;
 
     info!(record = %record.name, ip = %ip_str, "record updated successfully");
     Ok(())
+}
+
+/// Retry `op` on transient errors with exponential backoff, logging each retry.
+async fn with_retry<T, F, Fut>(label: &str, op: F) -> Result<T, Error>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, Error>>,
+{
+    op.retry(
+        ExponentialBuilder::default()
+            .with_min_delay(Duration::from_secs(1))
+            .with_max_delay(Duration::from_secs(60))
+            .with_max_times(5)
+            .with_jitter(),
+    )
+    .when(Error::is_retryable)
+    .notify(|err, dur| {
+        warn!(op = %label, error = %err, delay = ?dur, "transient failure, retrying");
+    })
+    .await
 }
